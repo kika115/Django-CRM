@@ -2,6 +2,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import CreateView, UpdateView, DetailView, ListView, TemplateView, View
+from silk.profiling.profiler import silk_profile
+
 from accounts.models import Account
 from common.models import User, Comment, Team
 from common.utils import STAGES, SOURCES, CURRENCY_CODES
@@ -15,6 +17,7 @@ class OpportunityListView(LoginRequiredMixin, TemplateView):
     context_object_name = "opportunity_list"
     template_name = "opportunity.html"
 
+    @silk_profile(name='View Opportunity query_set list')
     def get_queryset(self):
         queryset = self.model.objects.all().prefetch_related("contacts", "account")
         request_post = self.request.POST
@@ -31,6 +34,7 @@ class OpportunityListView(LoginRequiredMixin, TemplateView):
                 queryset = queryset.filter(contacts=request_post.get('contacts'))
         return queryset
 
+    @silk_profile(name='View Opportunity get_context_data list')
     def get_context_data(self, **kwargs):
         context = super(OpportunityListView, self).get_context_data(**kwargs)
         context["opportunity_list"] = self.get_queryset()
@@ -41,6 +45,7 @@ class OpportunityListView(LoginRequiredMixin, TemplateView):
         context["per_page"] = self.request.POST.get('per_page')
         return context
 
+    @silk_profile(name='View Opportunity post list')
     def post(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
@@ -57,12 +62,14 @@ class CreateOpportunityView(LoginRequiredMixin, CreateView):
         self.contacts = Contact.objects.all()
         return super(CreateOpportunityView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View Opportunity get_form_kwargs create')
     def get_form_kwargs(self):
         kwargs = super(CreateOpportunityView, self).get_form_kwargs()
         kwargs.update({"assigned_to": self.users, "account": self.accounts,
                        "contacts": self.contacts})
         return kwargs
 
+    @silk_profile(name='View Opportunity post create')
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
@@ -71,6 +78,7 @@ class CreateOpportunityView(LoginRequiredMixin, CreateView):
         else:
             return self.form_invalid(form)
 
+    @silk_profile(name='View Opportunity form_valid create')
     def form_valid(self, form):
         opportunity_obj = form.save(commit=False)
         opportunity_obj.created_by = self.request.user
@@ -90,12 +98,14 @@ class CreateOpportunityView(LoginRequiredMixin, CreateView):
         else:
             return redirect('opportunities:list')
 
+    @silk_profile(name='View Opportunity form_invalid create')
     def form_invalid(self, form):
         if self.request.is_ajax():
             return JsonResponse({'error': True, 'opportunity_errors': form.errors})
         return self.render_to_response(
             self.get_context_data(form=form))
 
+    @silk_profile(name='View Opportunity get_context_data create')
     def get_context_data(self, **kwargs):
         context = super(CreateOpportunityView, self).get_context_data(**kwargs)
         context["opportunity_form"] = context["form"]
@@ -120,11 +130,13 @@ class OpportunityDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "opportunity_record"
     template_name = "view_opportunity.html"
 
+    @silk_profile(name='View Opportunity get_queryset detail')
     def get_queryset(self):
         queryset = super(OpportunityDetailView, self).get_queryset()
         queryset = queryset.prefetch_related("contacts", "account")
         return queryset
 
+    @silk_profile(name='View Opportunity get_context_data detail')
     def get_context_data(self, **kwargs):
         context = super(OpportunityDetailView, self).get_context_data(**kwargs)
         comments = context["opportunity_record"].opportunity_comments.all()
@@ -143,12 +155,14 @@ class UpdateOpportunityView(LoginRequiredMixin, UpdateView):
         self.contacts = Contact.objects.all()
         return super(UpdateOpportunityView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View Opportunity get_form_kwargs update')
     def get_form_kwargs(self):
         kwargs = super(UpdateOpportunityView, self).get_form_kwargs()
         kwargs.update({"assigned_to": self.users, "account": self.accounts,
                        "contacts": self.contacts})
         return kwargs
 
+    @silk_profile(name='View Opportunity post update')
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = self.get_form()
@@ -157,6 +171,7 @@ class UpdateOpportunityView(LoginRequiredMixin, UpdateView):
         else:
             return self.form_invalid(form)
 
+    @silk_profile(name='View Opportunity form_valid update')
     def form_valid(self, form):
         opportunity_obj = form.save(commit=False)
         if self.request.POST.get('stage') in ['CLOSED WON', 'CLOSED LOST']:
@@ -175,12 +190,14 @@ class UpdateOpportunityView(LoginRequiredMixin, UpdateView):
             return JsonResponse({'error': False})
         return redirect('opportunities:list')
 
+    @silk_profile(name='View Opportunity form_invalid update')
     def form_invalid(self, form):
         if self.request.is_ajax():
             return JsonResponse({'error': True, 'opportunity_errors': form.errors})
         return self.render_to_response(
             self.get_context_data(form=form))
 
+    @silk_profile(name='View Opportunity get_context_data update')
     def get_context_data(self, **kwargs):
         context = super(UpdateOpportunityView, self).get_context_data(**kwargs)
         context["opportunity_obj"] = self.object
@@ -203,9 +220,11 @@ class UpdateOpportunityView(LoginRequiredMixin, UpdateView):
 
 class DeleteOpportunityView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View Opportunity get delete')
     def get(self, request, *args, **kwargs):
         return self.post(request, *args, **kwargs)
 
+    @silk_profile(name='View Opportunity post delete')
     def post(self, request, *args, **kwargs):
         self.object = get_object_or_404(Opportunity, id=kwargs.get("pk"))
         self.object.delete()
@@ -216,6 +235,7 @@ class DeleteOpportunityView(LoginRequiredMixin, View):
 
 class GetContactView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View Opportunity get GetContactView')
     def get(self, request, *args, **kwargs):
         account_id = request.GET.get("account")
         if account_id:
@@ -232,6 +252,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
     form_class = OpportunityCommentForm
     http_method_names = ["post"]
 
+    @silk_profile(name='View Opportunity post comment')
     def post(self, request, *args, **kwargs):
         self.object = None
         self.opportunity = get_object_or_404(Opportunity, id=request.POST.get('opportunityid'))
@@ -248,6 +269,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             data = {'error': "You don't have permission to comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Opportunity form_valid comment')
     def form_valid(self, form):
         comment = form.save(commit=False)
         comment.commented_by = self.request.user
@@ -259,6 +281,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             "commented_by": comment.commented_by.email
         })
 
+    @silk_profile(name='View Opportunity form_invalid comment')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
@@ -266,6 +289,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
 class UpdateCommentView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
+    @silk_profile(name='View Opportunity post comment edit')
     def post(self, request, *args, **kwargs):
         self.comment_obj = get_object_or_404(Comment, id=request.POST.get("commentid"))
         if request.user == self.comment_obj.commented_by:
@@ -278,6 +302,7 @@ class UpdateCommentView(LoginRequiredMixin, View):
             data = {'error': "You don't have permission to edit this comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Opportunity form_valid comment edit')
     def form_valid(self, form):
         self.comment_obj.comment = form.cleaned_data.get("comment")
         self.comment_obj.save(update_fields=["comment"])
@@ -286,12 +311,14 @@ class UpdateCommentView(LoginRequiredMixin, View):
             "comment": self.comment_obj.comment,
         })
 
+    @silk_profile(name='View Opportunity form_invalid comment edit')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
 
 class DeleteCommentView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View Opportunity post comment delete')
     def post(self, request, *args, **kwargs):
         self.object = get_object_or_404(Comment, id=request.POST.get("comment_id"))
         if request.user == self.object.commented_by:
@@ -308,6 +335,7 @@ class GetOpportunitiesView(LoginRequiredMixin, ListView):
     context_object_name = "opportunities"
     template_name = "opportunities_list.html"
 
+    @silk_profile(name='View Opportunity get_context_data GetOpportunitiesView edit')
     def get_context_data(self, **kwargs):
         context = super(GetOpportunitiesView, self).get_context_data(**kwargs)
         context["opportunities"] = self.get_queryset()

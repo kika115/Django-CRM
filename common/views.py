@@ -5,6 +5,8 @@ from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import (
     CreateView, UpdateView, DetailView, TemplateView, View, DeleteView)
+from silk.profiling.profiler import silk_profile
+
 from common.models import User
 from common.forms import UserForm, LoginForm, ChangePasswordForm, PasswordResetEmailForm
 from django.contrib.auth.views import PasswordResetView
@@ -35,10 +37,16 @@ class AdminRequiredMixin(AccessMixin):
 class HomeView(LoginRequiredMixin, TemplateView):
     template_name = "index.html"
 
+    @silk_profile(name='View homepage')
+    def get(self, request, *args, **kwargs):
+        context = self.get_context_data(**kwargs)
+        return self.render_to_response(context)
+
 
 class ChangePasswordView(LoginRequiredMixin, TemplateView):
     template_name = "change_password.html"
 
+    @silk_profile(name='View post changepassword')
     def post(self, request, *args, **kwargs):
         error, errors = "", ""
         form = ChangePasswordForm(request.POST)
@@ -59,6 +67,7 @@ class ChangePasswordView(LoginRequiredMixin, TemplateView):
 class ProfileView(LoginRequiredMixin, TemplateView):
     template_name = "profile.html"
 
+    @silk_profile(name='View get_context_data profileview')
     def get_context_data(self, **kwargs):
         context = super(ProfileView, self).get_context_data(**kwargs)
         context["user_obj"] = self.request.user
@@ -73,6 +82,7 @@ class LoginView(TemplateView):
             return HttpResponseRedirect('/')
         return super(LoginView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View post LoginView')
     def post(self, request, *args, **kwargs):
         form = LoginForm(request.POST, request=request)
         if form.is_valid():
@@ -104,6 +114,7 @@ class ForgotPasswordView(TemplateView):
 
 class LogoutView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View get logoutview')
     def get(self, request, *args, **kwargs):
         logout(request)
         request.session.flush()
@@ -115,6 +126,7 @@ class UsersListView(AdminRequiredMixin, TemplateView):
     context_object_name = "users"
     template_name = "list.html"
 
+    @silk_profile(name='View query_set userlistView')
     def get_queryset(self):
         queryset = self.model.objects.all()
         request_post = self.request.POST
@@ -129,6 +141,7 @@ class UsersListView(AdminRequiredMixin, TemplateView):
                 queryset = queryset.filter(email=request_post.get('email'))
         return queryset
 
+    @silk_profile(name='View get_context_data userlist')
     def get_context_data(self, **kwargs):
         context = super(UsersListView, self).get_context_data(**kwargs)
         context["users"] = self.get_queryset()
@@ -138,6 +151,7 @@ class UsersListView(AdminRequiredMixin, TemplateView):
         context['admin_email'] = settings.ADMIN_EMAIL
         return context
 
+    @silk_profile(name='View post userlist')
     def post(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
@@ -148,6 +162,7 @@ class CreateUserView(AdminRequiredMixin, CreateView):
     form_class = UserForm
     template_name = "create.html"
 
+    @silk_profile(name='View form_valid createuser')
     def form_valid(self, form):
         user = form.save(commit=False)
         if form.cleaned_data.get("password"):
@@ -158,13 +173,14 @@ class CreateUserView(AdminRequiredMixin, CreateView):
             return JsonResponse(data)
         return super(CreateUserView, self).form_valid(form)
 
-
+    @silk_profile(name='View form_invalid createuser')
     def form_invalid(self, form):
         response = super(CreateUserView, self).form_invalid(form)
         if self.request.is_ajax():
             return JsonResponse({'error': True, 'errors': form.errors})
         return response
 
+    @silk_profile(name='View get_context_data createuser')
     def get_context_data(self, **kwargs):
         context = super(CreateUserView, self).get_context_data(**kwargs)
         context["user_form"] = context["form"]
@@ -178,6 +194,7 @@ class UserDetailView(AdminRequiredMixin, DetailView):
     context_object_name = "users"
     template_name = "list.html"
 
+    @silk_profile(name='View get_context_data userdetail')
     def get_context_data(self, **kwargs):
         context = super(UserDetailView, self).get_context_data(**kwargs)
         users_list = User.objects.all()
@@ -194,6 +211,7 @@ class UpdateUserView(LoginRequiredMixin, UpdateView):
     form_class = UserForm
     template_name = "create.html"
 
+    @silk_profile(name='View form_valid updateuser')
     def form_valid(self, form):
         user = form.save(commit=False)
         if user.role == "USER":
@@ -208,13 +226,14 @@ class UpdateUserView(LoginRequiredMixin, UpdateView):
             return JsonResponse(data)
         return super(UpdateUserView, self).form_valid(form)
 
-
+    @silk_profile(name='View form_invalid updateuser')
     def form_invalid(self, form):
         response = super(UpdateUserView, self).form_invalid(form)
         if self.request.is_ajax():
             return JsonResponse({'error': True, 'errors': form.errors})
         return response
 
+    @silk_profile(name='View get_context_data updateuser')
     def get_context_data(self, **kwargs):
         context = super(UpdateUserView, self).get_context_data(**kwargs)
         context["user_obj"] = self.object
@@ -227,6 +246,7 @@ class UpdateUserView(LoginRequiredMixin, UpdateView):
 class UserDeleteView(AdminRequiredMixin, DeleteView):
     model = User
 
+    @silk_profile(name='View get userdelete')
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         self.object.delete()

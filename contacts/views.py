@@ -5,6 +5,8 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.generic import (
     CreateView, UpdateView, DetailView, ListView, TemplateView, View, DeleteView)
+from silk.profiling.profiler import silk_profile
+
 from accounts.models import Account
 from common.models import User, Address, Comment, Team
 from common.forms import BillingAddressForm
@@ -18,6 +20,7 @@ class ContactsListView(LoginRequiredMixin, TemplateView):
     context_object_name = "contact_obj_list"
     template_name = "contacts.html"
 
+    @silk_profile(name='View Contact query_set list')
     def get_queryset(self):
         queryset = self.model.objects.all().select_related("account")
         request_post = self.request.POST
@@ -34,6 +37,7 @@ class ContactsListView(LoginRequiredMixin, TemplateView):
                 queryset = queryset.filter(email__icontains=request_post.get('email'))
         return queryset
 
+    @silk_profile(name='View Contact get_context_data list')
     def get_context_data(self, **kwargs):
         context = super(ContactsListView, self).get_context_data(**kwargs)
         context["contact_obj_list"] = self.get_queryset()
@@ -41,6 +45,7 @@ class ContactsListView(LoginRequiredMixin, TemplateView):
         context["per_page"] = self.request.POST.get('per_page')
         return context
 
+    @silk_profile(name='View Contact post list')
     def post(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
@@ -56,11 +61,13 @@ class CreateContactView(LoginRequiredMixin, CreateView):
         self.accounts = Account.objects.all()
         return super(CreateContactView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View Contact get_form_kwargs create')
     def get_form_kwargs(self):
         kwargs = super(CreateContactView, self).get_form_kwargs()
         kwargs.update({"assigned_to": self.users, "account": self.accounts})
         return kwargs
 
+    @silk_profile(name='View Contact post create')
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
@@ -75,6 +82,7 @@ class CreateContactView(LoginRequiredMixin, CreateView):
         else:
             return self.form_invalid(form)
 
+    @silk_profile(name='View Contact form_valid create')
     def form_valid(self, form):
         contact_obj = form.save(commit=False)
         if self.request.POST.getlist('assigned_to', []):
@@ -88,6 +96,7 @@ class CreateContactView(LoginRequiredMixin, CreateView):
         else:
             return redirect('contacts:list')
 
+    @silk_profile(name='View Contact form_invalid create')
     def form_invalid(self, form):
         address_form = BillingAddressForm(self.request.POST)
         if self.request.is_ajax():
@@ -96,6 +105,7 @@ class CreateContactView(LoginRequiredMixin, CreateView):
         return self.render_to_response(
             self.get_context_data(form=form, address_form=address_form))
 
+    @silk_profile(name='View Contact get_context_data create')
     def get_context_data(self, **kwargs):
         context = super(CreateContactView, self).get_context_data(**kwargs)
         context["contact_form"] = context["form"]
@@ -122,10 +132,12 @@ class ContactDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "contact_record"
     template_name = "view_contact.html"
 
+    @silk_profile(name='View Contact get_queryset detail')
     def get_queryset(self):
         queryset = super(ContactDetailView, self).get_queryset()
         return queryset.select_related("address")
 
+    @silk_profile(name='View Contact get_context_data detail')
     def get_context_data(self, **kwargs):
         context = super(ContactDetailView, self).get_context_data(**kwargs)
         context.update({"comments": context["contact_record"].contact_comments.all()})
@@ -142,11 +154,13 @@ class UpdateContactView(LoginRequiredMixin, UpdateView):
         self.accounts = Account.objects.all()
         return super(UpdateContactView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View Contact get_form_kwargs update')
     def get_form_kwargs(self):
         kwargs = super(UpdateContactView, self).get_form_kwargs()
         kwargs.update({"assigned_to": self.users, "account": self.accounts})
         return kwargs
 
+    @silk_profile(name='View Contact post update')
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         address_obj = self.object.address
@@ -161,6 +175,7 @@ class UpdateContactView(LoginRequiredMixin, UpdateView):
         else:
             return self.form_invalid(form)
 
+    @silk_profile(name='View Contact form_valid update')
     def form_valid(self, form):
         contact_obj = form.save(commit=False)
         contact_obj.assigned_to.clear()
@@ -173,6 +188,7 @@ class UpdateContactView(LoginRequiredMixin, UpdateView):
             return JsonResponse({'error': False})
         return redirect("contacts:list")
 
+    @silk_profile(name='View Contact form_invalid update')
     def form_invalid(self, form):
         address_obj = self.object.address
         address_form = BillingAddressForm(self.request.POST, instance=address_obj)
@@ -182,6 +198,7 @@ class UpdateContactView(LoginRequiredMixin, UpdateView):
         return self.render_to_response(
             self.get_context_data(form=form, address_form=address_form))
 
+    @silk_profile(name='View Contact get_context_data update')
     def get_context_data(self, **kwargs):
         context = super(UpdateContactView, self).get_context_data(**kwargs)
         context["contact_obj"] = self.object
@@ -209,9 +226,11 @@ class UpdateContactView(LoginRequiredMixin, UpdateView):
 
 class RemoveContactView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View Contact get remove')
     def get(self, request, *args, **kwargs):
         return self.post(request, *args, **kwargs)
 
+    @silk_profile(name='View Contact post remove')
     def post(self, request, *args, **kwargs):
         contact_id = kwargs.get("pk")
         self.object = get_object_or_404(Contact, id=contact_id)
@@ -229,6 +248,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
     form_class = ContactCommentForm
     http_method_names = ["post"]
 
+    @silk_profile(name='View Contact post comment')
     def post(self, request, *args, **kwargs):
         self.object = None
         self.contact = get_object_or_404(Contact, id=request.POST.get('contactid'))
@@ -245,6 +265,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             data = {'error': "You don't have permission to comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Contact form_valid comment')
     def form_valid(self, form):
         comment = form.save(commit=False)
         comment.commented_by = self.request.user
@@ -256,6 +277,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             "commented_by": comment.commented_by.email
         })
 
+    @silk_profile(name='View Contact form_invalid comment')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
@@ -263,6 +285,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
 class UpdateCommentView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
+    @silk_profile(name='View Contact post comment update')
     def post(self, request, *args, **kwargs):
         self.comment_obj = get_object_or_404(Comment, id=request.POST.get("commentid"))
         if request.user == self.comment_obj.commented_by:
@@ -275,6 +298,7 @@ class UpdateCommentView(LoginRequiredMixin, View):
             data = {'error': "You don't have permission to edit this comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Contact form_valid comment update')
     def form_valid(self, form):
         self.comment_obj.comment = form.cleaned_data.get("comment")
         self.comment_obj.save(update_fields=["comment"])
@@ -283,12 +307,13 @@ class UpdateCommentView(LoginRequiredMixin, View):
             "comment": self.comment_obj.comment,
         })
 
+    @silk_profile(name='View Contact form_invalid comment update')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
 
 class DeleteCommentView(LoginRequiredMixin, View):
-
+    @silk_profile(name='View Contact post comment delete')
     def post(self, request, *args, **kwargs):
         self.object = get_object_or_404(Comment, id=request.POST.get("comment_id"))
         if request.user == self.object.commented_by:
@@ -305,6 +330,7 @@ class GetContactsView(LoginRequiredMixin, TemplateView):
     context_object_name = "contacts"
     template_name = "contacts_list.html"
 
+    @silk_profile(name='View Contact get_context_data GetContactsView')
     def get_context_data(self, **kwargs):
         context = super(GetContactsView, self).get_context_data(**kwargs)
         context["contacts"] = self.get_queryset()

@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views.generic import (
     CreateView, UpdateView, DetailView, ListView, TemplateView, View)
+from silk.profiling.profiler import silk_profile
 
 from accounts.models import Account
 from common.forms import BillingAddressForm
@@ -22,6 +23,7 @@ class LeadListView(LoginRequiredMixin, TemplateView):
     context_object_name = "lead_obj"
     template_name = "leads.html"
 
+    @silk_profile(name='View Leads query_set list')
     def get_queryset(self):
         queryset = self.model.objects.all().exclude(status='converted')
         request_post = self.request.POST
@@ -38,6 +40,7 @@ class LeadListView(LoginRequiredMixin, TemplateView):
                 queryset = queryset.filter(status=request_post.get('status'))
         return queryset
 
+    @silk_profile(name='View Leads get_context_data list')
     def get_context_data(self, **kwargs):
         context = super(LeadListView, self).get_context_data(**kwargs)
         context["lead_obj"] = self.get_queryset()
@@ -45,6 +48,7 @@ class LeadListView(LoginRequiredMixin, TemplateView):
         context["per_page"] = self.request.POST.get('per_page')
         return context
 
+    @silk_profile(name='View Leads post list')
     def post(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
@@ -59,11 +63,13 @@ class CreateLeadView(LoginRequiredMixin, CreateView):
         self.users = User.objects.filter(is_active=True).order_by('email')
         return super(CreateLeadView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View Leads get_form_kwargs create')
     def get_form_kwargs(self):
         kwargs = super(CreateLeadView, self).get_form_kwargs()
         kwargs.update({"assigned_to": self.users})
         return kwargs
 
+    @silk_profile(name='View Leads post create')
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
@@ -73,6 +79,7 @@ class CreateLeadView(LoginRequiredMixin, CreateView):
         else:
             return self.form_invalid(form, address_form)
 
+    @silk_profile(name='View Leads form_valid create')
     def form_valid(self, form, address_form):
         address_object = address_form.save()
         lead_obj = form.save(commit=False)
@@ -102,10 +109,12 @@ class CreateLeadView(LoginRequiredMixin, CreateView):
         else:
             return redirect('leads:list')
 
+    @silk_profile(name='View Leads form_invalid create')
     def form_invalid(self, form, address_form):
         return self.render_to_response(
             self.get_context_data(form=form, address_form=address_form))
 
+    @silk_profile(name='View Leads get_context_data create')
     def get_context_data(self, **kwargs):
         context = super(CreateLeadView, self).get_context_data(**kwargs)
         context["lead_form"] = context["form"]
@@ -134,6 +143,7 @@ class LeadDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "lead_record"
     template_name = "view_leads.html"
 
+    @silk_profile(name='View Leads get_context_data detail')
     def get_context_data(self, **kwargs):
         context = super(LeadDetailView, self).get_context_data(**kwargs)
         comments = Comment.objects.filter(lead__id=self.object.id).order_by('-id')
@@ -164,6 +174,7 @@ class UpdateLeadView(LoginRequiredMixin, UpdateView):
         self.users = User.objects.filter(is_active=True).order_by('email')
         return super(UpdateLeadView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View Leads get_initial update')
     def get_initial(self):
         initial = super(UpdateLeadView, self).get_initial()
         status = self.request.GET.get('status', None)
@@ -171,11 +182,13 @@ class UpdateLeadView(LoginRequiredMixin, UpdateView):
             initial.update({"status": status})
         return initial
 
+    @silk_profile(name='View Leads get_form_kwargs update')
     def get_form_kwargs(self):
         kwargs = super(UpdateLeadView, self).get_form_kwargs()
         kwargs.update({"assigned_to": self.users})
         return kwargs
 
+    @silk_profile(name='View Leads get update')
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         status = request.GET.get('status', None)
@@ -184,6 +197,7 @@ class UpdateLeadView(LoginRequiredMixin, UpdateView):
             self.object.status = "converted"
         return super(UpdateLeadView, self).get(request, *args, **kwargs)
 
+    @silk_profile(name='View Leads post update')
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         address_obj = self.object.address
@@ -198,6 +212,7 @@ class UpdateLeadView(LoginRequiredMixin, UpdateView):
         else:
             return self.form_invalid(form, address_form)
 
+    @silk_profile(name='View Leads form_valid update')
     def form_valid(self, form, address_form):
         address_obj = address_form.save()
         lead_obj = form.save(commit=False)
@@ -228,10 +243,12 @@ class UpdateLeadView(LoginRequiredMixin, UpdateView):
         else:
             return redirect('leads:list')
 
+    @silk_profile(name='View Leads form_invalid update')
     def form_invalid(self, form, address_form):
         return self.render_to_response(
             self.get_context_data(form=form, address_form=address_form))
 
+    @silk_profile(name='View Leads get_context_data update')
     def get_context_data(self, **kwargs):
         context = super(UpdateLeadView, self).get_context_data(**kwargs)
         context["lead_obj"] = self.object
@@ -261,10 +278,11 @@ class UpdateLeadView(LoginRequiredMixin, UpdateView):
 
 
 class DeleteLeadView(LoginRequiredMixin, View):
-
+    @silk_profile(name='View Leads get delete')
     def get(self, request, *args, **kwargs):
         return self.post(request, *args, **kwargs)
 
+    @silk_profile(name='View Leads post delete')
     def post(self, request, *args, **kwargs):
         self.object = get_object_or_404(Lead, id=kwargs.get("pk"))
         if self.object.address_id:
@@ -275,6 +293,7 @@ class DeleteLeadView(LoginRequiredMixin, View):
 
 class ConvertLeadView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View Leads get convert')
     def get(self, request, *args, **kwargs):
         lead_obj = get_object_or_404(Lead, id=kwargs.get("pk"))
         if lead_obj.account_name:
@@ -300,6 +319,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
     form_class = LeadCommentForm
     http_method_names = ["post"]
 
+    @silk_profile(name='View Leads post commnet')
     def post(self, request, *args, **kwargs):
         self.object = None
         self.lead = get_object_or_404(Lead, id=request.POST.get('leadid'))
@@ -316,6 +336,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             data = {'error': "You don't have permission to comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Leads form_valid commnet')
     def form_valid(self, form):
         comment = form.save(commit=False)
         comment.commented_by = self.request.user
@@ -327,6 +348,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             "commented_by": comment.commented_by.email
         })
 
+    @silk_profile(name='View Leads form_invalid commnet')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
@@ -334,6 +356,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
 class UpdateCommentView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
+    @silk_profile(name='View Leads post commnet update')
     def post(self, request, *args, **kwargs):
         self.comment_obj = get_object_or_404(Comment, id=request.POST.get("commentid"))
         if request.user == self.comment_obj.commented_by:
@@ -346,6 +369,7 @@ class UpdateCommentView(LoginRequiredMixin, View):
             data = {'error': "You don't have permission to edit this comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Leads form_valid commnet update')
     def form_valid(self, form):
         self.comment_obj.comment = form.cleaned_data.get("comment")
         self.comment_obj.save(update_fields=["comment"])
@@ -354,12 +378,14 @@ class UpdateCommentView(LoginRequiredMixin, View):
             "comment": self.comment_obj.comment,
         })
 
+    @silk_profile(name='View Leads form_invalid commnet update')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
 
 class DeleteCommentView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View Leads post commnet delete')
     def post(self, request, *args, **kwargs):
         self.object = get_object_or_404(Comment, id=request.POST.get("comment_id"))
         if request.user == self.object.commented_by:
@@ -376,6 +402,7 @@ class GetLeadsView(LoginRequiredMixin, ListView):
     context_object_name = "leads"
     template_name = "leads_list.html"
 
+    @silk_profile(name='View Leads get_context_data GetLeadsView')
     def get_context_data(self, **kwargs):
         context = super(GetLeadsView, self).get_context_data(**kwargs)
         context["leads"] = self.get_queryset()

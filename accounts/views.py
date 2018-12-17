@@ -1,19 +1,21 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseRedirect, HttpResponse, JsonResponse
-from django.shortcuts import render, get_object_or_404, redirect
-from django.urls import reverse
+from django.contrib.sites.shortcuts import get_current_site
+from django.core.mail import EmailMessage
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.views.generic import (
-    CreateView, UpdateView, DetailView, ListView, TemplateView, View, DeleteView)
+    CreateView, UpdateView, DetailView, TemplateView, View, DeleteView)
+from silk.profiling.profiler import silk_profile
 
+from accounts.forms import AccountForm, AccountCommentForm
 from accounts.models import Account
+from cases.models import Case
+from common.forms import BillingAddressForm, ShippingAddressForm
 from common.models import User, Address, Team, Comment
 from common.utils import INDCHOICES, COUNTRIES, CURRENCY_CODES, CASE_TYPE, PRIORITY_CHOICE, STATUS_CHOICE
-from opportunity.models import Opportunity, STAGES, SOURCES
 from contacts.models import Contact
-from cases.models import Case
-from accounts.forms import AccountForm, AccountCommentForm
-from common.forms import BillingAddressForm, ShippingAddressForm
+from opportunity.models import Opportunity, STAGES, SOURCES
 
 
 class AccountsListView(LoginRequiredMixin, TemplateView):
@@ -21,6 +23,7 @@ class AccountsListView(LoginRequiredMixin, TemplateView):
     context_object_name = "accounts_list"
     template_name = "accounts.html"
 
+    @silk_profile(name='View Account list')
     def get_queryset(self):
         queryset = self.model.objects.all().select_related("billing_address")
         request_post = self.request.POST
@@ -42,10 +45,12 @@ class AccountsListView(LoginRequiredMixin, TemplateView):
         context["per_page"] = self.request.POST.get('per_page')
         return context
 
+    @silk_profile(name='View Account list get')
     def get(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
 
+    @silk_profile(name='View Account list post')
     def post(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
@@ -65,6 +70,7 @@ class CreateAccountView(LoginRequiredMixin, CreateView):
         kwargs.update({'assigned_to': self.users})
         return kwargs
 
+    @silk_profile(name='View Account create post')
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
@@ -75,6 +81,7 @@ class CreateAccountView(LoginRequiredMixin, CreateView):
         else:
             return self.form_invalid(form, billing_form, shipping_form)
 
+    @silk_profile(name='View Account create form_valid')
     def form_valid(self, form, billing_form, shipping_form):
         # Save Billing & Shipping Address
         billing_address_object = billing_form.save()
@@ -87,6 +94,19 @@ class CreateAccountView(LoginRequiredMixin, CreateView):
         account_object.save()
         if self.request.POST.getlist('assigned_to', []):
             account_object.assigned_to.add(*self.request.POST.getlist('assigned_to'))
+            assigned_to_list = self.request.POST.getlist('assigned_to')
+            current_site = get_current_site(self.request)
+            for assigned_to_user in assigned_to_list:
+                user = get_object_or_404(User, pk=assigned_to_user)
+                mail_subject = 'Assigned to account.'
+                message = render_to_string('assigned_to/account_assigned.html', {
+                    'user': user,
+                    'domain': current_site.domain,
+                    'protocol': 'http',
+                    'account': account_object
+                })
+                email = EmailMessage(mail_subject, message, to=[user.email])
+                email.send()
         if self.request.POST.getlist('teams', []):
             account_object.teams.add(*self.request.POST.getlist('teams'))
         if self.request.POST.get("savenewform"):
@@ -100,6 +120,7 @@ class CreateAccountView(LoginRequiredMixin, CreateView):
                 form=form, billing_form=billing_form, shipping_form=shipping_form)
         )
 
+    @silk_profile(name='View Account create get_context_data')
     def get_context_data(self, **kwargs):
         context = super(CreateAccountView, self).get_context_data(**kwargs)
         context["account_form"] = context["form"]
@@ -129,6 +150,7 @@ class AccountDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "account_record"
     template_name = "view_account.html"
 
+    @silk_profile(name='View Account get detail')
     def get_context_data(self, **kwargs):
         context = super(AccountDetailView, self).get_context_data(**kwargs)
         account_record = context["account_record"]
@@ -172,6 +194,7 @@ class AccountUpdateView(LoginRequiredMixin, UpdateView):
         kwargs.update({'assigned_to': self.users})
         return kwargs
 
+    @silk_profile(name='View Account post update')
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = self.get_form()
@@ -183,6 +206,7 @@ class AccountUpdateView(LoginRequiredMixin, UpdateView):
         else:
             return self.form_invalid(form, billing_form, shipping_form)
 
+    @silk_profile(name='View Account form_valid update')
     def form_valid(self, form, billing_form, shipping_form):
         # Save Billing & Shipping Address
         billing_address_object = billing_form.save()
@@ -196,16 +220,31 @@ class AccountUpdateView(LoginRequiredMixin, UpdateView):
         account_object.teams.clear()
         if self.request.POST.getlist('assigned_to', []):
             account_object.assigned_to.add(*self.request.POST.getlist('assigned_to'))
+            assigned_to_list = self.request.POST.getlist('assigned_to')
+            current_site = get_current_site(self.request)
+            for assigned_to_user in assigned_to_list:
+                user = get_object_or_404(User, pk=assigned_to_user)
+                mail_subject = 'Assigned to account.'
+                message = render_to_string('assigned_to/account_assigned.html', {
+                    'user': user,
+                    'domain': current_site.domain,
+                    'protocol': 'http',
+                    'account': account_object
+                })
+                email = EmailMessage(mail_subject, message, to=[user.email])
+                email.send()
         if self.request.POST.getlist('teams', []):
             account_object.teams.add(*self.request.POST.getlist('teams'))
         return redirect("accounts:list")
 
+    @silk_profile(name='View Account form_invalid update')
     def form_invalid(self, form, billing_form, shipping_form):
         return self.render_to_response(
             self.get_context_data(
                 form=form, billing_form=billing_form, shipping_form=shipping_form)
         )
 
+    @silk_profile(name='View Account get_context_data update')
     def get_context_data(self, **kwargs):
         context = super(AccountUpdateView, self).get_context_data(**kwargs)
         context["account_obj"] = self.object
@@ -241,6 +280,7 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
     model = Account
     template_name = 'view_account.html'
 
+    @silk_profile(name='View Account get delete')
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         self.object.billing_address.delete()
@@ -254,6 +294,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
     form_class = AccountCommentForm
     http_method_names = ["post"]
 
+    @silk_profile(name='View Account post commnet')
     def post(self, request, *args, **kwargs):
         self.object = None
         self.account = get_object_or_404(Account, id=request.POST.get('accountid'))
@@ -270,6 +311,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             data = {'error': "You don't have permission to comment for this account."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Account form_valid commnet')
     def form_valid(self, form):
         comment = form.save(commit=False)
         comment.commented_by = self.request.user
@@ -281,6 +323,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             "commented_by": comment.commented_by.email
         })
 
+    @silk_profile(name='View Account form_invalid commnet')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
@@ -288,6 +331,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
 class UpdateCommentView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
+    @silk_profile(name='View Account post commnet edit')
     def post(self, request, *args, **kwargs):
         self.comment_obj = get_object_or_404(Comment, id=request.POST.get("commentid"))
         if request.user == self.comment_obj.commented_by:
@@ -300,6 +344,7 @@ class UpdateCommentView(LoginRequiredMixin, View):
             data = {'error': "You don't have permission to edit this comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Account form_valid commnet edit')
     def form_valid(self, form):
         self.comment_obj.comment = form.cleaned_data.get("comment")
         self.comment_obj.save(update_fields=["comment"])
@@ -308,12 +353,14 @@ class UpdateCommentView(LoginRequiredMixin, View):
             "comment": self.comment_obj.comment,
         })
 
+    @silk_profile(name='View Account form_invalid  edit')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
 
 class DeleteCommentView(LoginRequiredMixin, View):
 
+    @silk_profile(name='View Account post commnet delete')
     def post(self, request, *args, **kwargs):
         self.object = get_object_or_404(Comment, id=request.POST.get("comment_id"))
         if request.user == self.object.commented_by:

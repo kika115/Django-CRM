@@ -1,8 +1,12 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.sites.shortcuts import get_current_site
+from django.core.mail import EmailMessage
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.views.generic import CreateView, UpdateView, DetailView, ListView, TemplateView, View
+from silk.profiling.profiler import silk_profile
 
 from cases.models import Case
 from cases.forms import CaseForm, CaseCommentForm
@@ -17,6 +21,7 @@ class CasesListView(LoginRequiredMixin, TemplateView):
     context_object_name = "cases"
     template_name = "cases.html"
 
+    @silk_profile(name='View Cases get_queryset list')
     def get_queryset(self):
         queryset = self.model.objects.all().select_related("account")
         request_post = self.request.POST
@@ -31,6 +36,7 @@ class CasesListView(LoginRequiredMixin, TemplateView):
                 queryset = queryset.filter(priority=request_post.get('priority'))
         return queryset
 
+    @silk_profile(name='View Cases get_context_data list')
     def get_context_data(self, **kwargs):
         context = super(CasesListView, self).get_context_data(**kwargs)
         context["cases"] = self.get_queryset()
@@ -41,10 +47,12 @@ class CasesListView(LoginRequiredMixin, TemplateView):
         context["case_status"] = STATUS_CHOICE
         return context
 
+    @silk_profile(name='View Cases get list')
     def get(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
 
+    @silk_profile(name='View Cases post list')
     def post(self, request, *args, **kwargs):
         context = self.get_context_data(**kwargs)
         return self.render_to_response(context)
@@ -67,6 +75,7 @@ class CreateCaseView(LoginRequiredMixin, CreateView):
                        "contacts": self.contacts})
         return kwargs
 
+    @silk_profile(name='View Cases post create')
     def post(self, request, *args, **kwargs):
         self.object = None
         form = self.get_form()
@@ -75,12 +84,26 @@ class CreateCaseView(LoginRequiredMixin, CreateView):
         else:
             return self.form_invalid(form)
 
+    @silk_profile(name='View Cases form_valid create')
     def form_valid(self, form):
         case = form.save(commit=False)
         case.created_by = self.request.user
         case.save()
         if self.request.POST.getlist('assigned_to', []):
             case.assigned_to.add(*self.request.POST.getlist('assigned_to'))
+            assigned_to_list = self.request.POST.getlist('assigned_to')
+            current_site = get_current_site(self.request)
+            for assigned_to_user in assigned_to_list:
+                user = get_object_or_404(User, pk=assigned_to_user)
+                mail_subject = 'Assigned to case.'
+                message = render_to_string('assigned_to/cases_assigned.html', {
+                    'user': user,
+                    'domain': current_site.domain,
+                    'protocol': 'http',
+                    'case': case
+                })
+                email = EmailMessage(mail_subject, message, to=[user.email])
+                email.send()
         if self.request.POST.getlist('teams', []):
             case.teams.add(*self.request.POST.getlist('teams'))
         if self.request.POST.getlist('contacts', []):
@@ -92,11 +115,13 @@ class CreateCaseView(LoginRequiredMixin, CreateView):
         else:
             return redirect('cases:list')
 
+    @silk_profile(name='View Cases form_invalid create')
     def form_invalid(self, form):
         if self.request.is_ajax():
             return JsonResponse({'error': True, 'case_errors': form.errors})
         return self.render_to_response(self.get_context_data(form=form))
 
+    @silk_profile(name='View Cases get_context_data create')
     def get_context_data(self, **kwargs):
         context = super(CreateCaseView, self).get_context_data(**kwargs)
         context["teams"] = Team.objects.all()
@@ -121,10 +146,12 @@ class CaseDetailView(LoginRequiredMixin, DetailView):
     context_object_name = "case_record"
     template_name = "view_case.html"
 
+    @silk_profile(name='View Cases get_query detail')
     def get_queryset(self):
         queryset = super(CaseDetailView, self).get_queryset()
         return queryset.prefetch_related("contacts", "account")
 
+    @silk_profile(name='View Cases get_context_data detail')
     def get_context_data(self, **kwargs):
         context = super(CaseDetailView, self).get_context_data(**kwargs)
         context.update({"comments": context["case_record"].cases.all()})
@@ -142,12 +169,14 @@ class UpdateCaseView(LoginRequiredMixin, UpdateView):
         self.contacts = Contact.objects.all()
         return super(UpdateCaseView, self).dispatch(request, *args, **kwargs)
 
+    @silk_profile(name='View Cases get_form_kwargs update')
     def get_form_kwargs(self):
         kwargs = super(UpdateCaseView, self).get_form_kwargs()
         kwargs.update({"assigned_to": self.users, "account": self.accounts,
                        "contacts": self.contacts})
         return kwargs
 
+    @silk_profile(name='View Cases post update')
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = self.get_form()
@@ -156,6 +185,7 @@ class UpdateCaseView(LoginRequiredMixin, UpdateView):
         else:
             return self.form_invalid(form)
 
+    @silk_profile(name='View Cases form_valid update')
     def form_valid(self, form):
         case_obj = form.save()
         case_obj.assigned_to.clear()
@@ -163,6 +193,19 @@ class UpdateCaseView(LoginRequiredMixin, UpdateView):
         case_obj.contacts.clear()
         if self.request.POST.getlist('assigned_to', []):
             case_obj.assigned_to.add(*self.request.POST.getlist('assigned_to'))
+            assigned_to_list = self.request.POST.getlist('assigned_to')
+            current_site = get_current_site(self.request)
+            for assigned_to_user in assigned_to_list:
+                user = get_object_or_404(User, pk=assigned_to_user)
+                mail_subject = 'Assigned to case.'
+                message = render_to_string('assigned_to/cases_assigned.html', {
+                    'user': user,
+                    'domain': current_site.domain,
+                    'protocol': 'http',
+                    'case': case_obj
+                })
+                email = EmailMessage(mail_subject, message, to=[user.email])
+                email.send()
         if self.request.POST.getlist('teams', []):
             case_obj.teams.add(*self.request.POST.getlist('teams'))
         if self.request.POST.getlist('contacts', []):
@@ -171,11 +214,13 @@ class UpdateCaseView(LoginRequiredMixin, UpdateView):
             return JsonResponse({'error': False})
         return redirect("cases:list")
 
+    @silk_profile(name='View Cases form_invalid update')
     def form_invalid(self, form):
         if self.request.is_ajax():
             return JsonResponse({'error': True, 'case_errors': form.errors})
         return self.render_to_response(self.get_context_data(form=form))
 
+    @silk_profile(name='View Cases get_context_data update')
     def get_context_data(self, **kwargs):
         context = super(UpdateCaseView, self).get_context_data(**kwargs)
         context["case_obj"] = self.object
@@ -197,13 +242,14 @@ class UpdateCaseView(LoginRequiredMixin, UpdateView):
 
 
 class RemoveCaseView(LoginRequiredMixin, View):
-
+    @silk_profile(name='View Cases get remove')
     def get(self, request, *args, **kwargs):
         case_id = kwargs.get("case_id")
         self.object = get_object_or_404(Case, id=case_id)
         self.object.delete()
         return redirect("cases:list")
 
+    @silk_profile(name='View Cases post remove')
     def post(self, request, *args, **kwargs):
         case_id = kwargs.get("case_id")
         self.object = get_object_or_404(Case, id=case_id)
@@ -217,7 +263,7 @@ class RemoveCaseView(LoginRequiredMixin, View):
 
 
 class CloseCaseView(LoginRequiredMixin, View):
-
+    @silk_profile(name='View Cases post close')
     def post(self, request, *args, **kwargs):
         case_id = request.POST.get("case_id")
         self.object = get_object_or_404(Case, id=case_id)
@@ -228,7 +274,7 @@ class CloseCaseView(LoginRequiredMixin, View):
 
 
 class SelectContactsView(LoginRequiredMixin, View):
-
+    @silk_profile(name='View Cases get select contacts')
     def get(self, request, *args, **kwargs):
         contact_account = request.GET.get("account")
         if contact_account:
@@ -251,6 +297,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
     form_class = CaseCommentForm
     http_method_names = ["post"]
 
+    @silk_profile(name='View Cases post comment')
     def post(self, request, *args, **kwargs):
         self.object = None
         self.case = get_object_or_404(Case, id=request.POST.get('caseid'))
@@ -267,6 +314,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             data = {'error': "You don't have permission to comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Cases form_valid comment')
     def form_valid(self, form):
         comment = form.save(commit=False)
         comment.commented_by = self.request.user
@@ -278,6 +326,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
             "commented_by": comment.commented_by.email
         })
 
+    @silk_profile(name='View Cases form_invalid comment')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
@@ -285,6 +334,7 @@ class AddCommentView(LoginRequiredMixin, CreateView):
 class UpdateCommentView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
+    @silk_profile(name='View Cases post comment edit')
     def post(self, request, *args, **kwargs):
         self.comment_obj = get_object_or_404(Comment, id=request.POST.get("commentid"))
         if request.user == self.comment_obj.commented_by:
@@ -297,6 +347,7 @@ class UpdateCommentView(LoginRequiredMixin, View):
             data = {'error': "You don't have permission to edit this comment."}
             return JsonResponse(data)
 
+    @silk_profile(name='View Cases form_valid comment edit')
     def form_valid(self, form):
         self.comment_obj.comment = form.cleaned_data.get("comment")
         self.comment_obj.save(update_fields=["comment"])
@@ -305,12 +356,15 @@ class UpdateCommentView(LoginRequiredMixin, View):
             "comment": self.comment_obj.comment,
         })
 
+    @silk_profile(name='View Cases form_invalid comment edit')
     def form_invalid(self, form):
         return JsonResponse({"error": form['comment'].errors})
 
 
 class DeleteCommentView(LoginRequiredMixin, View):
 
+
+    @silk_profile(name='View Cases post comment delete')
     def post(self, request, *args, **kwargs):
         self.object = get_object_or_404(Comment, id=request.POST.get("comment_id"))
         if request.user == self.object.commented_by:
