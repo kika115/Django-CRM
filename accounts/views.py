@@ -283,8 +283,6 @@ class AccountDeleteView(LoginRequiredMixin, DeleteView):
     @silk_profile(name='View Account get delete')
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
-        self.object.billing_address.delete()
-        self.object.shipping_address.delete()
         self.object.delete()
         return redirect("accounts:list")
 

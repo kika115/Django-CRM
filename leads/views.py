@@ -295,7 +295,7 @@ class ConvertLeadView(LoginRequiredMixin, View):
 
     @silk_profile(name='View Leads get convert')
     def get(self, request, *args, **kwargs):
-        lead_obj = get_object_or_404(Lead, id=kwargs.get("pk"))
+        lead_obj = Lead.objects.get(id=kwargs.get("pk"))
         if lead_obj.account_name:
             lead_obj.status = 'converted'
             lead_obj.save()

@@ -245,13 +245,13 @@ class UpdateUserView(LoginRequiredMixin, UpdateView):
 
 class UserDeleteView(AdminRequiredMixin, DeleteView):
     model = User
+    template_name = ''
 
     @silk_profile(name='View get userdelete')
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         self.object.delete()
-        return redirect("common:users_list")
-
+        return redirect('common:users_list')
 
 class PasswordResetView(PasswordResetView):
     template_name = 'registration/password_reset_form.html'

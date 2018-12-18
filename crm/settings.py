@@ -34,9 +34,7 @@ INSTALLED_APPS = [
     'opportunity',
     'planner',
     'sorl.thumbnail',
-    'django_nose',
-    'coverage',
-    'silk'
+    'silk',
 ]
 
 MIDDLEWARE = [
@@ -121,20 +119,20 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 # EMAIL_BACKEND = 'django.core.mail.backends.dummy.EmailBackend'
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# EMAIL_HOST = 'localhost'
+EMAIL_HOST = 'localhost'
 # EMAIL_PORT = 25
 # AUTHENTICATION_BACKENDS = ('django.contrib.auth.backends.ModelBackend', )
 
 
-EMAIL_HOST = 'smtp.sendgrid.net'
-EMAIL_HOST_USER = os.getenv('SG_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('SG_PWD', '')
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+# EMAIL_HOST = 'smtp.sendgrid.net'
+# EMAIL_HOST_USER = os.getenv('SG_USER', '')
+# EMAIL_HOST_PASSWORD = os.getenv('SG_PWD', '')
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
@@ -191,15 +189,9 @@ try:
     from .dev_settings import *
 except ImportError:
     pass
-# Use nose to run all tests
-TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'
 
-# Tell nose to measure coverage on the 'foo' and 'bar' apps
-NOSE_ARGS = [
-    '--with-coverage',
-    '--cover-package=common,accounts,cases,contacts,crm,leads,opportunity,planner'
-]
 FAKER_LOCALE = None     # settings.LANGUAGE_CODE is loaded
 FAKER_PROVIDERS = None
+
 SILKY_PYTHON_PROFILER = True
 SILKY_PYTHON_PROFILER_BINARY = True

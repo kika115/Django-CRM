@@ -85,4 +85,3 @@ class EditOpportunityTestCase(OpportunityModel, TestCase):
             'lead_source': "Call", 'probability': "58",
             'closed_on': "2016-05-04", 'description': "hgfdxc"})
         self.assertEqual(response.status_code, 200)
-
